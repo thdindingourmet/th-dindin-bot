@@ -83,20 +83,19 @@ console.log("BODY COMPLETO:", JSON.stringify(data, null, 2));
     if (mensagem === "pedir") {
         await enviarMensagem(numero, "💰 Gerando pagamento PIX...");
 
-        try {
-            const clienteId = await criarCliente("Cliente Dindin", numero);
-            const pagamento = await gerarPix(10, clienteId);
+       try {
+  const clienteId = await criarCliente("Cliente Dindin", numero);
+  const pagamento = await gerarPix(10, clienteId);
 
-            const pixCode = pagamento.pix?.payload;
+  const pixCode = pagamento.pix?.payload;
 
-            await enviarMensagem(
-                numero,
-                `💳 *PIX gerado*
+  await enviarMensagem(numero, `💳 PIX gerado:\n${pixCode}`);
 
-💰 Valor: R$10
+} catch (erro) {
+  console.error("ERRO ASAAS:", erro.response?.data || erro.message);
 
-📌 Copia e cola:
-${pixCode}
+  await enviarMensagem(numero, "❌ Erro ao gerar pagamento. Tente novamente.");
+}
 
 Após pagar, aguarde confirmação automática`
             );
