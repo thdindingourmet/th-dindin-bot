@@ -81,15 +81,16 @@ app.post('/webhook', async (req, res) => {
             const clienteId = await criarCliente("Cliente Dindin", numero);
             const pagamento = await gerarPix(10, clienteId);
 
-   await enviarMensagem(
-    numero,
-    `💳 *PIX gerado*
+            const pixCode = pagamento.pix?.payload;
+
+            await enviarMensagem(
+                numero,
+                `💳 *PIX gerado*
 
 💰 Valor: R$10
 
 📌 Copia e cola:
-${pagamento.pixQrCode}`
-);
+${pixCode}
 
 Após pagar, aguarde confirmação automática`
             );
@@ -110,10 +111,7 @@ app.post('/asaas', async (req, res) => {
     console.log("Asaas:", data);
 
     if (data.event === "PAYMENT_RECEIVED") {
-        // Aqui você pode melhorar depois (mapear telefone)
         console.log("Pagamento confirmado!");
-
-        // ⚠️ Aqui ainda falta mapear número corretamente
     }
 
     res.sendStatus(200);
@@ -126,20 +124,3 @@ app.post('/status', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
-
-app.post('/webhook', async (req, res) => {
-    const data = req.body;
-
-    const mensagem = data?.text?.message?.toLowerCase();
-    const numero = data?.phone;
-
-    if (!mensagem || !numero) return res.sendStatus(200);
-
-    console.log("Mensagem recebida:", mensagem);
-
-    if (mensagem === "oi") {
-        await enviarMensagem(numero, "🍦 Bem-vindo à TH Dindin Gourmet!\nDigite *pedir* para fazer seu pedido");
-    }
-
-    res.sendStatus(200);
-});
