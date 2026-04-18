@@ -83,13 +83,15 @@ app.post('/webhook', async (req, res) => {
             const clienteId = await criarCliente("Cliente Dindin", numero);
             const pagamento = await gerarPix(10, clienteId);
 
-            await enviarMensagem(numero,
-`💳 *PIX gerado*
+      await enviarMensagem(
+    numero,
+    `💳 *PIX gerado*
 
 💰 Valor: R$10
 
 📌 Copia e cola:
-${pagamento.pixQrCode}
+${pagamento.pixQrCode}`
+);
 
 Após pagar, aguarde confirmação automática`
             );
