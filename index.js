@@ -61,7 +61,11 @@ async function gerarPix(valor, clienteId) {
 app.post('/webhook', async (req, res) => {
     const data = req.body;
 
-    const mensagem = data?.text?.message?.toLowerCase();
+   const mensagem = (
+    data?.text?.message ||
+    data?.message ||
+    data?.body
+)?.toLowerCase();
     const numero = data?.phone;
 
     if (!mensagem || !numero) return res.sendStatus(200);
