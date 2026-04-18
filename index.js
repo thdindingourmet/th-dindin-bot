@@ -38,22 +38,21 @@ async function criarCliente(nome, telefone) {
 
 // 💳 Gerar PIX
 async function gerarPix(valor, clienteId) {
-    const response = await axios.post(
-        "https://sandbox.asaas.com/api/v3/payments",
-        {
-            customer: clienteId,
-            billingType: "PIX",
-            value: valor,
-            dueDate: new Date().toISOString().split("T")[0]
-        },
-        {
-          headers: {
-    access_token: ASAAS_API_KEY,
-    "Content-Type": "application/json"
-}
-            }
+  const response = await axios.post(
+    "https://sandbox.asaas.com/api/v3/payments",
+    {
+        customer: clienteId,
+        billingType: "PIX",
+        value: valor,
+        dueDate: new Date().toISOString().split("T")[0]
+    },
+    {
+        headers: {
+            access_token: ASAAS_API_KEY,
+            "Content-Type": "application/json"
         }
-    );
+    }
+);
 
     return response.data;
 }
