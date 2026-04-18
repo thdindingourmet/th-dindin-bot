@@ -26,10 +26,12 @@ async function criarCliente(nome, telefone) {
             phone: telefone
         },
         {
-          headers: {
-    access_token: ASAAS_API_KEY,
-    "Content-Type": "application/json"
-}
+            headers: {
+                access_token: ASAAS_API_KEY,
+                "Content-Type": "application/json"
+            }
+        }
+    );
 
     return response.data.id;
 }
