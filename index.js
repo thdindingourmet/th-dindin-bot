@@ -126,3 +126,20 @@ app.post('/status', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+
+app.post('/webhook', async (req, res) => {
+    const data = req.body;
+
+    const mensagem = data?.text?.message?.toLowerCase();
+    const numero = data?.phone;
+
+    if (!mensagem || !numero) return res.sendStatus(200);
+
+    console.log("Mensagem recebida:", mensagem);
+
+    if (mensagem === "oi") {
+        await enviarMensagem(numero, "🍦 Bem-vindo à TH Dindin Gourmet!\nDigite *pedir* para fazer seu pedido");
+    }
+
+    res.sendStatus(200);
+});
