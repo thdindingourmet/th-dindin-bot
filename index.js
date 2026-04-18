@@ -29,8 +29,7 @@ async function criarCliente(nome, telefone) {
           headers: {
     access_token: ASAAS_API_KEY,
     "Content-Type": "application/json"
-}
-    );
+});
 
     return response.data.id;
 }
