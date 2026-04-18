@@ -82,7 +82,7 @@ app.post('/webhook', async (req, res) => {
             const clienteId = await criarCliente("Cliente Dindin", numero);
             const pagamento = await gerarPix(10, clienteId);
 
-      await enviarMensagem(
+   await enviarMensagem(
     numero,
     `💳 *PIX gerado*
 
