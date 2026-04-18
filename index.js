@@ -60,7 +60,9 @@ async function gerarPix(valor, clienteId) {
 // 🚀 WEBHOOK Z-API
 app.post('/webhook', async (req, res) => {
     const data = req.body;
-
+    
+console.log("BODY COMPLETO:", JSON.stringify(data, null, 2));
+    
    const mensagem = (
     data?.text?.message ||
     data?.message ||
