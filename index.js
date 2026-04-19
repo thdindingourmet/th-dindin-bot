@@ -72,32 +72,40 @@ async function obterOuCriarCliente(nome, telefone) {
     return response.data.id;
 }
 
-// 💳 GERAÇÃO DE PIX (Processo de 2 etapas: Criar cobrança + Obter Payload)
+// 💳 GERAÇÃO DE PIX (Com Logs de Investigação)
 async function gerarPix(valor, clienteId) {
-    // 1. Criar a cobrança
-    const cobranca = await axios.post(
-        "https://sandbox.asaas.com/v3/payments",
-        {
-            customer: clienteId,
-            billingType: "PIX",
-            value: valor,
-            dueDate: new Date().toISOString().split("T")[0]
-        },
-        { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
-    );
+    try {
+        // 1. Criar a cobrança no Sandbox
+        const cobranca = await axios.post(
+            "https://sandbox.asaas.com/api/v3/payments",
+            {
+                customer: clienteId,
+                billingType: "PIX",
+                value: valor,
+                dueDate: new Date().toISOString().split("T")[0]
+            },
+            { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
+        );
 
-    // 2. Obter o código PIX Copia e Cola
-    const qrCode = await axios.get(
-        `https://sandbox.asaas.com/v3/payments/${cobranca.data.id}/pixQrCode`,
-        { headers: { access_token: ASAAS_API_KEY } }
-    );
+        console.log("✅ Cobrança criada com ID:", cobranca.data.id);
 
-    return {
-        id: cobranca.data.id,
-        payload: qrCode.data.payload
-    };
+        // 2. Obter o código PIX Copia e Cola
+        const qrCode = await axios.get(
+            `https://sandbox.asaas.com/api/v3/payments/${cobranca.data.id}/pixQrCode`,
+            { headers: { access_token: ASAAS_API_KEY } }
+        );
+
+        console.log("🔍 Resposta do Asaas para o Pix:", qrCode.data); // A nossa lupa!
+
+        return {
+            id: cobranca.data.id,
+            payload: qrCode.data?.payload || "Erro: Payload não encontrado no Asaas"
+        };
+    } catch (error) {
+        console.error("🚨 Erro na função gerarPix:", error.response?.data || error.message);
+        throw error;
+    }
 }
-
 // 🚀 WEBHOOK WHATSAPP (Entrada de mensagens)
 app.post('/webhook', async (req, res) => {
     try {
