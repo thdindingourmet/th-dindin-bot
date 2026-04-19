@@ -133,9 +133,9 @@ app.post('/webhook', async (req, res) => {
                 await salvarPedidos();
 
                 await enviarMensagem(
-                    numero,
-                    `💳 *Pagamento PIX*\n\nUtilize o código Copia e Cola abaixo:\n\n${pagamento.payload}\n\n✅ O seu pedido será confirmado automaticamente após o pagamento!`
-                );
+    numero,
+    `💳 *PIX Copia e Cola:*\n\n${pagamento.payload}\n\nApós pagar, aguarde a confirmação automática do nosso sistema 🍦`
+);
 
             } catch (err) {
                 console.error("Erro ao processar pedido:", err.message);
