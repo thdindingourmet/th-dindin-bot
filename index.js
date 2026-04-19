@@ -53,7 +53,7 @@ async function obterOuCriarCliente(nome, telefone) {
     }
 
     const response = await axios.post(
-        "https://api.asaas.com/v3/customers",
+        "https://sandbox.asaas.com/v3/customers",
         { name: nome, phone: telefone },
         {
             headers: {
@@ -72,7 +72,7 @@ async function obterOuCriarCliente(nome, telefone) {
 // 💳 PIX
 async function gerarPix(valor, clienteId) {
     const response = await axios.post(
-        "https://api.asaas.com/v3/payments",
+        "https://sandbox.asaas.com/v3/payments",
         {
             customer: clienteId,
             billingType: "PIX",
