@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const fs = require('fs');
 
 const app = express();
 app.use(express.json());
@@ -9,10 +10,32 @@ const ZAPI_TOKEN = process.env.ZAPI_TOKEN;
 const INSTANCE = process.env.INSTANCE;
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
 
-// 📦 Armazenamento de pedidos em memória
-const pedidos = [];
+// 📂 ARQUIVOS
+const PEDIDOS_FILE = 'pedidos.json';
+const CLIENTES_FILE = 'clientes.json';
 
-// 📩 Enviar mensagem WhatsApp
+// 📦 CARREGAR DADOS
+let pedidos = [];
+let clientes = {};
+
+if (fs.existsSync(PEDIDOS_FILE)) {
+    pedidos = JSON.parse(fs.readFileSync(PEDIDOS_FILE));
+}
+
+if (fs.existsSync(CLIENTES_FILE)) {
+    clientes = JSON.parse(fs.readFileSync(CLIENTES_FILE));
+}
+
+// 💾 SALVAR
+function salvarPedidos() {
+    fs.writeFileSync(PEDIDOS_FILE, JSON.stringify(pedidos, null, 2));
+}
+
+function salvarClientes() {
+    fs.writeFileSync(CLIENTES_FILE, JSON.stringify(clientes, null, 2));
+}
+
+// 📩 WHATSAPP
 async function enviarMensagem(numero, mensagem) {
     await axios.post(
         `https://api.z-api.io/instances/${INSTANCE}/token/${ZAPI_TOKEN}/send-text`,
@@ -23,14 +46,15 @@ async function enviarMensagem(numero, mensagem) {
     );
 }
 
-// 👤 Criar cliente
-async function criarCliente(nome, telefone) {
+// 👤 CLIENTE ASAAS
+async function obterOuCriarCliente(nome, telefone) {
+    if (clientes[telefone]) {
+        return clientes[telefone];
+    }
+
     const response = await axios.post(
         "https://api.asaas.com/v3/customers",
-        {
-            name: nome,
-            phone: telefone
-        },
+        { name: nome, phone: telefone },
         {
             headers: {
                 access_token: ASAAS_API_KEY,
@@ -39,10 +63,13 @@ async function criarCliente(nome, telefone) {
         }
     );
 
+    clientes[telefone] = response.data.id;
+    salvarClientes();
+
     return response.data.id;
 }
 
-// 💳 Gerar PIX
+// 💳 PIX
 async function gerarPix(valor, clienteId) {
     const response = await axios.post(
         "https://api.asaas.com/v3/payments",
@@ -63,12 +90,10 @@ async function gerarPix(valor, clienteId) {
     return response.data;
 }
 
-// 🚀 WEBHOOK
+// 🚀 WEBHOOK WHATSAPP
 app.post('/webhook', async (req, res) => {
     try {
         const data = req.body;
-
-        console.log("BODY:", JSON.stringify(data, null, 2));
 
         if (data?.fromMe) return res.sendStatus(200);
 
@@ -82,40 +107,53 @@ app.post('/webhook', async (req, res) => {
 
         if (!mensagem || !numero) return res.sendStatus(200);
 
+        // 👋 INICIO
         if (mensagem === "oi") {
             await enviarMensagem(numero, "🍦 Bem-vindo!\nDigite *pedir*");
         }
 
+        // 🧾 PEDIDO
         if (mensagem === "pedir") {
-            await enviarMensagem(numero, "💰 Gerando PIX...");
+
+            await enviarMensagem(numero, "💰 Gerando pagamento PIX...");
 
             try {
-                const clienteId = await criarCliente("Cliente", numero);
+
+                const pedido = {
+                    id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                    cliente: "Cliente Dindin",
+                    telefone: numero,
+                    valor: 10,
+                    status: "aguardando_pagamento",
+                    paymentId: null,
+                    createdAt: new Date()
+                };
+
+                pedidos.push(pedido);
+                salvarPedidos();
+
+                // cliente
+                const clienteId = await obterOuCriarCliente("Cliente Dindin", numero);
+
+                // pix
                 const pagamento = await gerarPix(10, clienteId);
 
-                const pix = pagamento?.pix?.payload;
+                if (!pagamento?.pix?.payload) {
+                    throw new Error("PIX não gerado");
+                }
 
-                if (!pix) throw new Error("PIX não gerado");
-
-                // 📦 Salvar pedido
-                const novoPedido = {
-                    id: Date.now(),
-                    telefone: numero,
-                    status: "pendente",
-                    total: 10,
-                    itens: [],
-                    created_at: new Date().toISOString()
-                };
-                pedidos.push(novoPedido);
+                pedido.paymentId = pagamento.id;
+                salvarPedidos();
 
                 await enviarMensagem(
                     numero,
-                    `💳 PIX:\n${pix}\n\nApós pagar, aguarde confirmação`
+                    `💳 PIX:\n${pagamento.pix.payload}\n\nApós pagar, aguarde confirmação automática`
                 );
 
             } catch (erro) {
-                console.error("Erro PIX:", erro.response?.data || erro.message);
-                await enviarMensagem(numero, "❌ Erro ao gerar PIX");
+                console.error("ERRO:", erro.response?.data || erro.message);
+
+                await enviarMensagem(numero, "❌ Erro ao gerar pagamento.");
             }
         }
 
@@ -127,34 +165,48 @@ app.post('/webhook', async (req, res) => {
     }
 });
 
-// 📦 Listar pedidos (usado pelo Base44 para sincronização)
+// 💰 WEBHOOK ASAAS
+app.post('/asaas', async (req, res) => {
+    const data = req.body;
+
+    console.log("ASAAS:", data);
+
+    if (data.event === "PAYMENT_RECEIVED") {
+
+        const paymentId = data.payment.id;
+
+        const pedido = pedidos.find(p => p.paymentId === paymentId);
+
+        if (pedido && pedido.status !== "pago") {
+
+            pedido.status = "pago";
+            salvarPedidos();
+
+            await enviarMensagem(
+                pedido.telefone,
+                "✅ Pagamento confirmado! Pedido aceito 🍦"
+            );
+        }
+    }
+
+    res.sendStatus(200);
+});
+
+// 📦 API PEDIDOS (Base44)
 app.get('/pedidos', (req, res) => {
     res.json(pedidos);
 });
 
-// 📥 Criar pedido via API
-app.post('/pedidos', (req, res) => {
-    const novoPedido = {
-        id: Date.now(),
-        ...req.body,
-        created_at: new Date().toISOString()
-    };
-    pedidos.push(novoPedido);
-    console.log("Novo pedido criado:", novoPedido);
-    res.json(novoPedido);
-});
-
-// 🔄 Atualizar status do pedido
 app.patch('/pedidos/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    const pedido = pedidos.find(p => p.id === id);
-    
+    const pedido = pedidos.find(p => p.id === req.params.id);
+
     if (!pedido) {
         return res.status(404).json({ error: "Pedido não encontrado" });
     }
 
     Object.assign(pedido, req.body);
-    console.log("Pedido atualizado:", pedido);
+    salvarPedidos();
+
     res.json(pedido);
 });
 
@@ -164,4 +216,4 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`Rodando na porta ${PORT}`));
