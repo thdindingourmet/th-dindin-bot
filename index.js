@@ -57,22 +57,26 @@ async function enviarMensagem(numero, mensagem) {
     }
 }
 
-// 👤 GESTÃO DE CLIENTES (Asaas) - Versão Espiã 🕵️‍♂️
+// 👤 GESTÃO DE CLIENTES (Asaas) - Versão com CPF Falso para Teste 🕵️‍♂️
 async function obterOuCriarCliente(nome, telefone) {
     try {
         console.log(`\n[ETAPA 1] Tentando criar cliente no Asaas. Número: ${telefone}`);
         
         const response = await axios.post(
             "https://sandbox.asaas.com/api/v3/customers",
-            { name: nome, phone: telefone },
+            { 
+                name: nome, 
+                phone: telefone,
+                cpfCnpj: "45564811029" // 👈 INJETAMOS UM CPF FALSO (porém válido matematicamente) SÓ PARA O TESTE PASSAR
+            },
             { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
         );
 
-        console.log(`[ETAPA 2] Sucesso! Cliente criado. ID do Asaas: ${response.data.id}\n`);
+        console.log(`[ETAPA 2] Sucesso! Cliente criado. ID: ${response.data.id}\n`);
         return response.data.id;
 
     } catch (error) {
-        console.error(`\n🚨 [ERRO FATAL] Falha ao criar cliente no Asaas:`, error.response?.data || error.message);
+        console.error(`\n🚨 [ERRO FATAL] Falha ao criar cliente:`, error.response?.data || error.message);
         throw error;
     }
 }
