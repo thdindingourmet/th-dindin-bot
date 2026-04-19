@@ -2,8 +2,12 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
+const cors = require('cors'); // 👈 1. Importar o CORS
 
 const app = express();
+
+// 👈 2. Configurar o CORS para aceitar pedidos do seu site Base44
+app.use(cors()); 
 app.use(express.json());
 
 // 🔐 CONFIGURAÇÕES
@@ -19,6 +23,7 @@ const CLIENTES_FILE = 'clientes.json';
 let pedidos = [];
 let clientes = {};
 
+// Carregamento inicial
 if (fs.existsSync(PEDIDOS_FILE)) {
     pedidos = JSON.parse(fs.readFileSync(PEDIDOS_FILE));
 }
@@ -47,18 +52,15 @@ async function enviarMensagem(numero, mensagem) {
     }
 }
 
-// 👤 GESTÃO DE CLIENTES (Asaas) - Agora recebe o CPF real
+// 👤 GESTÃO DE CLIENTES (Asaas)
 async function obterOuCriarCliente(nome, telefone, cpfUsuario) {
     try {
-        // Para este teste, vamos sempre criar no Sandbox
-        console.log(`\nCriando cliente com CPF: ${cpfUsuario}`);
-        
         const response = await axios.post(
             "https://sandbox.asaas.com/api/v3/customers",
             { 
                 name: nome, 
                 phone: telefone,
-                cpfCnpj: cpfUsuario // 👈 Aqui entra o CPF que o cliente digitou no zap!
+                cpfCnpj: cpfUsuario 
             },
             { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
         );
@@ -74,103 +76,75 @@ async function obterOuCriarCliente(nome, telefone, cpfUsuario) {
 
 // 💳 GERAÇÃO DE PIX
 async function gerarPix(valor, clienteId) {
-    try {
-        const cobranca = await axios.post(
-            "https://sandbox.asaas.com/api/v3/payments",
-            {
-                customer: clienteId,
-                billingType: "PIX",
-                value: valor,
-                dueDate: new Date().toISOString().split("T")[0]
-            },
-            { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
-        );
+    const cobranca = await axios.post(
+        "https://sandbox.asaas.com/api/v3/payments",
+        {
+            customer: clienteId,
+            billingType: "PIX",
+            value: valor,
+            dueDate: new Date().toISOString().split("T")[0]
+        },
+        { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
+    );
 
-        const qrCode = await axios.get(
-            `https://sandbox.asaas.com/api/v3/payments/${cobranca.data.id}/pixQrCode`,
-            { headers: { access_token: ASAAS_API_KEY } }
-        );
+    const qrCode = await axios.get(
+        `https://sandbox.asaas.com/api/v3/payments/${cobranca.data.id}/pixQrCode`,
+        { headers: { access_token: ASAAS_API_KEY } }
+    );
 
-        return { id: cobranca.data.id, payload: qrCode.data.payload };
-    } catch (error) {
-        throw error;
-    }
+    return { id: cobranca.data.id, payload: qrCode.data.payload };
 }
 
-// 🚀 WEBHOOK WHATSAPP (O Cérebro da Conversa)
-app.post('/webhook', async (req, res) => {
+// 🌐 3. NOVA ROTA: RECEBER PEDIDOS DO SITE (BASE44)
+app.post('/api/checkout-site', async (req, res) => {
     try {
-        const data = req.body;
-        if (data?.fromMe) return res.sendStatus(200);
+        const { nome, telefone, cpf, valorTotal, pedidoId, endereco } = req.body;
 
-        const mensagem = (data?.text?.message || data?.message || data?.body)?.toLowerCase()?.trim();
-        const numero = data?.phone || data?.from;
+        console.log(`🛒 Novo pedido recebido do site: ${pedidoId}`);
 
-        if (!mensagem || !numero) return res.sendStatus(200);
-
-        // 👋 INÍCIO
-        if (mensagem === "oi" || mensagem === "olá") {
-            await enviarMensagem(numero, "🍦 Bem-vindo à TH DinDin Gourmet!\n\nDigite *pedir* para fazer a sua encomenda.");
-            return res.sendStatus(200);
+        // Validação básica do CPF exigido pelo Asaas
+        if (!cpf || cpf.length < 11) {
+            return res.status(400).json({ sucesso: false, erro: "CPF é obrigatório para gerar o PIX." });
         }
 
-        // 🧾 PASSO 1: CLIENTE PEDE
-        if (mensagem === "pedir") {
-            // Criamos um pedido com status de "espera"
-            const novoPedido = {
-                id: `${Date.now()}`,
-                telefone: numero,
-                valor: 10.00,
-                status: "aguardando_cpf", // 👈 O Bot sabe que o próximo passo é o CPF
-                createdAt: new Date()
-            };
-            pedidos.push(novoPedido);
-            await salvarPedidos();
+        // 1. Criar/Obter Cliente no Asaas
+        const clienteId = await obterOuCriarCliente(nome, telefone, cpf.replace(/\D/g, ''));
 
-            await enviarMensagem(numero, "📝 Para gerar o seu pagamento PIX de R$ 10,00, por favor, *digite o seu CPF* (apenas números):");
-            return res.sendStatus(200);
-        }
+        // 2. Gerar o PIX
+        const pagamento = await gerarPix(valorTotal, clienteId);
 
-        // 🧾 PASSO 2: BOT RECEBE O CPF
-        // Procura se este número de telemóvel tem algum pedido à espera de CPF
-        const pedidoPendente = pedidos.find(p => p.telefone === numero && p.status === "aguardando_cpf");
+        // 3. Salvar o pedido na nossa lista
+        const novoPedido = {
+            id: pedidoId,
+            telefone: telefone.replace(/\D/g, ''),
+            valor: valorTotal,
+            status: "aguardando_pagamento",
+            paymentId: pagamento.id,
+            origem: "site",
+            createdAt: new Date()
+        };
+        pedidos.push(novoPedido);
+        await salvarPedidos();
 
-        if (pedidoPendente) {
-            // Limpa a mensagem (remove pontos e traços, deixa só os números)
-            const cpfLimpo = mensagem.replace(/\D/g, '');
+        // 4. Enviar mensagem de aviso para o seu WhatsApp (opcional)
+        await enviarMensagem(novoPedido.telefone, `🍦 Olá ${nome}! Recebemos o seu pedido no site.\n\nCaso o PIX não tenha aparecido na tela, use este código abaixo:\n\n${pagamento.payload}`);
 
-            // Validação simples para ver se tem 11 dígitos
-            if (cpfLimpo.length !== 11) {
-                await enviarMensagem(numero, "❌ CPF inválido. Por favor, digite os 11 números do seu CPF, sem pontos ou traços:");
-                return res.sendStatus(200);
-            }
+        // 5. Responder ao Base44 no formato que ele espera
+        res.json({
+            sucesso: true,
+            pixCopiaECola: pagamento.payload,
+            pedidoId: pedidoId
+        });
 
-            await enviarMensagem(numero, "⏳ Validando os dados e a gerar o seu PIX...");
-
-            try {
-                // Passa o CPF limpo para o Asaas
-                const clienteId = await obterOuCriarCliente("Cliente WhatsApp", numero, cpfLimpo);
-                const pagamento = await gerarPix(pedidoPendente.valor, clienteId);
-
-                // Atualiza o pedido para "aguardando_pagamento"
-                pedidoPendente.status = "aguardando_pagamento";
-                pedidoPendente.paymentId = pagamento.id;
-                await salvarPedidos();
-
-                await enviarMensagem(
-                    numero,
-                    `💳 *PIX Copia e Cola:*\n\n${pagamento.payload}\n\n✅ O seu pedido será confirmado automaticamente assim que o pagamento cair na conta!`
-                );
-            } catch (err) {
-                await enviarMensagem(numero, "❌ Ocorreu um erro ao gerar o pagamento com este CPF. Tente novamente mais tarde.");
-            }
-            return res.sendStatus(200);
-        }
-
-        res.sendStatus(200);
     } catch (error) {
-        res.sendStatus(200);
+        console.error("Erro no checkout do site:", error.message);
+        res.status(500).json({ sucesso: false, erro: "Erro ao processar pagamento." });
     }
+});
+
+// 🚀 WEBHOOK WHATSAPP (MANTIDO)
+app.post('/webhook', async (req, res) => {
+    // ... (Mantenha o código do seu webhook de whatsapp aqui igual ao anterior)
 });
 
 // 💰 WEBHOOK ASAAS (Confirmação de Pagamento)
@@ -189,7 +163,7 @@ app.post('/asaas', async (req, res) => {
                 pedido.status = "pago";
                 await salvarPedidos();
 
-                await enviarMensagem(pedido.telefone, "✅ *Pagamento Confirmado!*\n\nO seu dindin já está a ser preparado e será entregue em breve. Obrigado pela preferência! 🍦");
+                await enviarMensagem(pedido.telefone, "✅ *Pagamento Confirmado!*\n\nO seu pedido do site foi pago com sucesso e já está na nossa cozinha! 🍦");
             }
         }
         res.sendStatus(200);
@@ -198,8 +172,7 @@ app.post('/asaas', async (req, res) => {
     }
 });
 
-app.get('/pedidos', (req, res) => res.json(pedidos));
-app.get('/', (req, res) => res.send("TH DinDin Bot Ativo! 🚀"));
+app.get('/', (req, res) => res.send("API TH DinDin Ativa! 🚀"));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor na porta ${PORT}`));
