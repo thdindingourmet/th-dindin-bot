@@ -59,10 +59,12 @@ async function enviarMensagem(numero, mensagem) {
 
 // 👤 GESTÃO DE CLIENTES (Asaas)
 async function obterOuCriarCliente(nome, telefone) {
-    if (clientes[telefone]) return clientes[telefone];
+    // 1. COMENTAMOS a linha abaixo para o bot ignorar a memória antiga e criar sempre um cliente novo no Sandbox
+    // if (clientes[telefone]) return clientes[telefone];
 
+    // 2. Garantimos que a URL está a apontar para o SANDBOX
     const response = await axios.post(
-        "https://sandbox.asaas.com/v3/customers",
+        "https://sandbox.asaas.com/api/v3/customers",
         { name: nome, phone: telefone },
         { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
     );
