@@ -129,3 +129,19 @@ app.post('/status', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+
+app.get('/pedidos', async (req, res) => {
+  try {
+    // Aqui você pode retornar pedidos fake ou depois integrar com banco
+    res.json([
+      {
+        id: "1",
+        cliente: "Teste",
+        status: "pendente",
+        total: 23.97
+      }
+    ]);
+  } catch (error) {
+    res.status(500).json({ erro: "Erro ao buscar pedidos" });
+  }
+});
