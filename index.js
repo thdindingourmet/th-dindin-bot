@@ -91,65 +91,21 @@ async function gerarPix(valor, clienteId) {
 
 // 🚀 WEBHOOK WHATSAPP
 app.post('/webhook', async (req, res) => {
-    try {
-        const data = req.body;
+    console.log("🔥 CHEGOU");
 
-        if (data?.fromMe) return res.sendStatus(200);
+    const numero = req.body?.phone || req.body?.from;
 
-        const mensagem = (
-            data?.text?.message ||
-            data?.message ||
-            data?.body
-        )?.toLowerCase()?.trim();
-
-        const numero = data?.phone || data?.from;
-
-        if (!mensagem || !numero) return res.sendStatus(200);
-
-        if (mensagem === "oi") {
-            await enviarMensagem(numero, "🍦 Bem-vindo!\nDigite *pedir*");
-        }
-
-        if (mensagem === "pedir") {
-
-            await enviarMensagem(numero, "💰 Gerando PIX...");
-
-            const pedido = {
-                id: `${Date.now()}`,
-                telefone: numero,
-                valor: 10,
-                status: "aguardando_pagamento",
-                paymentId: null,
-                createdAt: new Date()
-            };
-
-            pedidos.push(pedido);
-            salvarPedidos();
-
-            try {
-                const clienteId = await obterOuCriarCliente("Cliente", numero);
-                const pagamento = await gerarPix(10, clienteId);
-
-                pedido.paymentId = pagamento.id;
-                salvarPedidos();
-
-                await enviarMensagem(
-                    numero,
-                    `💳 PIX:\n${pagamento.pix.payload}\n\nAguardando pagamento...`
-                );
-
-            } catch (erro) {
-                console.error("Erro PIX:", erro.response?.data || erro.message);
-                await enviarMensagem(numero, "❌ Erro ao gerar pagamento.");
+    if (numero) {
+        await axios.post(
+            `https://api.z-api.io/instances/${process.env.INSTANCE}/token/${process.env.ZAPI_TOKEN}/send-text`,
+            {
+                phone: numero,
+                message: "TESTE OK 🚀"
             }
-        }
-
-        res.sendStatus(200);
-
-    } catch (err) {
-        console.error(err);
-        res.sendStatus(200);
+        );
     }
+
+    res.sendStatus(200);
 });
 
 // 💰 WEBHOOK ASAAS
