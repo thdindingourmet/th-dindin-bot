@@ -10,11 +10,14 @@ const ZAPI_TOKEN = process.env.ZAPI_TOKEN;
 const INSTANCE = process.env.INSTANCE;
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
 
+// 🔥 URL ASAAS
+const ASAAS_URL = "https://api.asaas.com/v3";
+
 // 📂 ARQUIVOS
 const PEDIDOS_FILE = 'pedidos.json';
 const CLIENTES_FILE = 'clientes.json';
 
-// 📦 CARREGAR DADOS
+// 📦 DADOS
 let pedidos = [];
 let clientes = {};
 
@@ -27,13 +30,13 @@ if (fs.existsSync(CLIENTES_FILE)) {
 }
 
 // 💾 SALVAR
-function salvarPedidos() {
+const salvarPedidos = () => {
     fs.writeFileSync(PEDIDOS_FILE, JSON.stringify(pedidos, null, 2));
-}
+};
 
-function salvarClientes() {
+const salvarClientes = () => {
     fs.writeFileSync(CLIENTES_FILE, JSON.stringify(clientes, null, 2));
-}
+};
 
 // 📩 WHATSAPP
 async function enviarMensagem(numero, mensagem) {
@@ -48,17 +51,14 @@ async function enviarMensagem(numero, mensagem) {
 
 // 👤 CLIENTE ASAAS
 async function obterOuCriarCliente(nome, telefone) {
-    if (clientes[telefone]) {
-        return clientes[telefone];
-    }
+    if (clientes[telefone]) return clientes[telefone];
 
     const response = await axios.post(
-       `${ASAAS_URL}/customers`,
+        `${ASAAS_URL}/customers`,
         { name: nome, phone: telefone },
         {
             headers: {
-                access_token: ASAAS_API_KEY,
-                "Content-Type": "application/json"
+                access_token: ASAAS_API_KEY
             }
         }
     );
@@ -69,10 +69,10 @@ async function obterOuCriarCliente(nome, telefone) {
     return response.data.id;
 }
 
-// 💳 PIX
+// 💳 GERAR PIX
 async function gerarPix(valor, clienteId) {
     const response = await axios.post(
-       `${ASAAS_URL}/payments`,
+        `${ASAAS_URL}/payments`,
         {
             customer: clienteId,
             billingType: "PIX",
@@ -81,8 +81,7 @@ async function gerarPix(valor, clienteId) {
         },
         {
             headers: {
-                access_token: ASAAS_API_KEY,
-                "Content-Type": "application/json"
+                access_token: ASAAS_API_KEY
             }
         }
     );
@@ -92,10 +91,6 @@ async function gerarPix(valor, clienteId) {
 
 // 🚀 WEBHOOK WHATSAPP
 app.post('/webhook', async (req, res) => {
-    console.log("🔥 WEBHOOK ATINGIDO");
-    console.log(JSON.stringify(req.body, null, 2));
-
-    app.post('/webhook', async (req, res) => {
     try {
         const data = req.body;
 
@@ -111,60 +106,48 @@ app.post('/webhook', async (req, res) => {
 
         if (!mensagem || !numero) return res.sendStatus(200);
 
-        // 👋 INICIO
         if (mensagem === "oi") {
             await enviarMensagem(numero, "🍦 Bem-vindo!\nDigite *pedir*");
         }
 
-        // 🧾 PEDIDO
         if (mensagem === "pedir") {
 
-            await enviarMensagem(numero, "💰 Gerando pagamento PIX...");
+            await enviarMensagem(numero, "💰 Gerando PIX...");
+
+            const pedido = {
+                id: `${Date.now()}`,
+                telefone: numero,
+                valor: 10,
+                status: "aguardando_pagamento",
+                paymentId: null,
+                createdAt: new Date()
+            };
+
+            pedidos.push(pedido);
+            salvarPedidos();
 
             try {
-
-                const pedido = {
-                    id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                    cliente: "Cliente Dindin",
-                    telefone: numero,
-                    valor: 10,
-                    status: "aguardando_pagamento",
-                    paymentId: null,
-                    createdAt: new Date()
-                };
-
-                pedidos.push(pedido);
-                salvarPedidos();
-
-                // cliente
-                const clienteId = await obterOuCriarCliente("Cliente Dindin", numero);
-
-                // pix
+                const clienteId = await obterOuCriarCliente("Cliente", numero);
                 const pagamento = await gerarPix(10, clienteId);
-
-                if (!pagamento?.pix?.payload) {
-                    throw new Error("PIX não gerado");
-                }
 
                 pedido.paymentId = pagamento.id;
                 salvarPedidos();
 
                 await enviarMensagem(
                     numero,
-                    `💳 PIX:\n${pagamento.pix.payload}\n\nApós pagar, aguarde confirmação automática`
+                    `💳 PIX:\n${pagamento.pix.payload}\n\nAguardando pagamento...`
                 );
 
             } catch (erro) {
-                console.error("ERRO:", erro.response?.data || erro.message);
-
+                console.error("Erro PIX:", erro.response?.data || erro.message);
                 await enviarMensagem(numero, "❌ Erro ao gerar pagamento.");
             }
         }
 
         res.sendStatus(200);
 
-    } catch (error) {
-        console.error("Erro webhook:", error);
+    } catch (err) {
+        console.error(err);
         res.sendStatus(200);
     }
 });
@@ -173,9 +156,9 @@ app.post('/webhook', async (req, res) => {
 app.post('/asaas', async (req, res) => {
     const data = req.body;
 
-    console.log("ASAAS:", data);
+    console.log("ASAAS EVENT:", data.event);
 
-    if (data.event === "PAYMENT_RECEIVED") {
+    if (data.event === "PAYMENT_CONFIRMED") {
 
         const paymentId = data.payment.id;
 
@@ -196,10 +179,8 @@ app.post('/asaas', async (req, res) => {
     res.sendStatus(200);
 });
 
-// 📦 API PEDIDOS (Base44)
-app.get('/pedidos', (req, res) => {
-    res.json(pedidos);
-});
+// 📦 API
+app.get('/pedidos', (req, res) => res.json(pedidos));
 
 app.patch('/pedidos/:id', (req, res) => {
     const pedido = pedidos.find(p => p.id === req.params.id);
