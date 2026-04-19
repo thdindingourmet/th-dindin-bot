@@ -41,10 +41,18 @@ async function enviarMensagem(numero, mensagem) {
     try {
         await axios.post(
             `https://api.z-api.io/instances/${INSTANCE}/token/${ZAPI_TOKEN}/send-text`,
-            { phone: numero, message: mensagem }
+            { 
+                phone: numero, 
+                message: mensagem 
+            },
+            {
+                headers: {
+                    // 👇 Enviando a senha extra exigida pela Z-API
+                    "Client-Token": process.env.ZAPI_CLIENT_TOKEN 
+                }
+            }
         );
     } catch (error) {
-        // 👇 MUDAMOS AQUI PARA MOSTRAR O MOTIVO EXATO DO ERRO
         console.error("Erro ao enviar WhatsApp:", error.response?.data || error.message);
     }
 }
