@@ -92,6 +92,10 @@ async function gerarPix(valor, clienteId) {
 
 // 🚀 WEBHOOK WHATSAPP
 app.post('/webhook', async (req, res) => {
+    console.log("🔥 WEBHOOK ATINGIDO");
+    console.log(JSON.stringify(req.body, null, 2));
+
+    app.post('/webhook', async (req, res) => {
     try {
         const data = req.body;
 
