@@ -57,23 +57,25 @@ async function enviarMensagem(numero, mensagem) {
     }
 }
 
-// 👤 GESTÃO DE CLIENTES (Asaas)
+// 👤 GESTÃO DE CLIENTES (Asaas) - Versão Espiã 🕵️‍♂️
 async function obterOuCriarCliente(nome, telefone) {
-    // 1. COMENTAMOS a linha abaixo para o bot ignorar a memória antiga e criar sempre um cliente novo no Sandbox
-    // if (clientes[telefone]) return clientes[telefone];
+    try {
+        console.log(`\n[ETAPA 1] Tentando criar cliente no Asaas. Número: ${telefone}`);
+        
+        const response = await axios.post(
+            "https://sandbox.asaas.com/api/v3/customers",
+            { name: nome, phone: telefone },
+            { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
+        );
 
-    // 2. Garantimos que a URL está a apontar para o SANDBOX
-    const response = await axios.post(
-        "https://sandbox.asaas.com/api/v3/customers",
-        { name: nome, phone: telefone },
-        { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
-    );
+        console.log(`[ETAPA 2] Sucesso! Cliente criado. ID do Asaas: ${response.data.id}\n`);
+        return response.data.id;
 
-    clientes[telefone] = response.data.id;
-    await salvarClientes();
-    return response.data.id;
+    } catch (error) {
+        console.error(`\n🚨 [ERRO FATAL] Falha ao criar cliente no Asaas:`, error.response?.data || error.message);
+        throw error;
+    }
 }
-
 // 💳 GERAÇÃO DE PIX (Com Logs de Investigação)
 async function gerarPix(valor, clienteId) {
     try {
