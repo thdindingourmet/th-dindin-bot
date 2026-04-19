@@ -1,33 +1,33 @@
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
-const fsPromises = require('fs').promises; // Usado para não travar o Node.js ao salvar
+const fsPromises = require('fs').promises;
 
 const app = express();
 app.use(express.json());
 
-// 🔐 CONFIG
+// 🔐 CONFIGURAÇÕES (Certifica-te de que estas variáveis estão no teu .env)
 const ZAPI_TOKEN = process.env.ZAPI_TOKEN;
 const INSTANCE = process.env.INSTANCE;
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
+const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN; // O token que configuraste no painel do Asaas
 
-// 📂 ARQUIVOS
+// 📂 FICHEIROS DE DADOS
 const PEDIDOS_FILE = 'pedidos.json';
 const CLIENTES_FILE = 'clientes.json';
 
-// 📦 CARREGAR DADOS (Rodado apenas ao iniciar o servidor)
 let pedidos = [];
 let clientes = {};
 
+// Carregamento inicial
 if (fs.existsSync(PEDIDOS_FILE)) {
     pedidos = JSON.parse(fs.readFileSync(PEDIDOS_FILE));
 }
-
 if (fs.existsSync(CLIENTES_FILE)) {
     clientes = JSON.parse(fs.readFileSync(CLIENTES_FILE));
 }
 
-// 💾 SALVAR (Modo assíncrono para evitar lentidão e travamentos)
+// 💾 FUNÇÕES DE SALVAMENTO (Assíncronas)
 async function salvarPedidos() {
     await fsPromises.writeFile(PEDIDOS_FILE, JSON.stringify(pedidos, null, 2));
 }
@@ -36,43 +36,36 @@ async function salvarClientes() {
     await fsPromises.writeFile(CLIENTES_FILE, JSON.stringify(clientes, null, 2));
 }
 
-// 📩 WHATSAPP
+// 📩 ENVIO WHATSAPP (Z-API)
 async function enviarMensagem(numero, mensagem) {
-    await axios.post(
-        `https://api.z-api.io/instances/${INSTANCE}/token/${ZAPI_TOKEN}/send-text`,
-        {
-            phone: numero,
-            message: mensagem
-        }
-    );
+    try {
+        await axios.post(
+            `https://api.z-api.io/instances/${INSTANCE}/token/${ZAPI_TOKEN}/send-text`,
+            { phone: numero, message: mensagem }
+        );
+    } catch (error) {
+        console.error("Erro ao enviar mensagem WhatsApp:", error.message);
+    }
 }
 
-// 👤 CLIENTE ASAAS
+// 👤 GESTÃO DE CLIENTES (Asaas)
 async function obterOuCriarCliente(nome, telefone) {
-    if (clientes[telefone]) {
-        return clientes[telefone];
-    }
+    if (clientes[telefone]) return clientes[telefone];
 
     const response = await axios.post(
         "https://api.asaas.com/v3/customers",
         { name: nome, phone: telefone },
-        {
-            headers: {
-                access_token: ASAAS_API_KEY,
-                "Content-Type": "application/json"
-            }
-        }
+        { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
     );
 
     clientes[telefone] = response.data.id;
-    await salvarClientes(); // Adicionado await
-
+    await salvarClientes();
     return response.data.id;
 }
 
-// 💳 PIX (CORRIGIDO: Agora faz 2 requisições para pegar o Copia e Cola)
+// 💳 GERAÇÃO DE PIX (Processo de 2 etapas: Criar cobrança + Obter Payload)
 async function gerarPix(valor, clienteId) {
-    // 1. Cria a cobrança no Asaas
+    // 1. Criar a cobrança
     const cobranca = await axios.post(
         "https://api.asaas.com/v3/payments",
         {
@@ -81,108 +74,84 @@ async function gerarPix(valor, clienteId) {
             value: valor,
             dueDate: new Date().toISOString().split("T")[0]
         },
-        {
-            headers: {
-                access_token: ASAAS_API_KEY,
-                "Content-Type": "application/json"
-            }
-        }
+        { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
     );
 
-    // 2. Busca o QR Code e o Copia e Cola da cobrança gerada
+    // 2. Obter o código PIX Copia e Cola
     const qrCode = await axios.get(
         `https://api.asaas.com/v3/payments/${cobranca.data.id}/pixQrCode`,
-        {
-            headers: {
-                access_token: ASAAS_API_KEY
-            }
-        }
+        { headers: { access_token: ASAAS_API_KEY } }
     );
 
     return {
         id: cobranca.data.id,
-        payload: qrCode.data.payload // Código Copia e Cola final
+        payload: qrCode.data.payload
     };
 }
 
-// 🚀 WEBHOOK WHATSAPP
+// 🚀 WEBHOOK WHATSAPP (Entrada de mensagens)
 app.post('/webhook', async (req, res) => {
     try {
         const data = req.body;
-
         if (data?.fromMe) return res.sendStatus(200);
 
-        const mensagem = (
-            data?.text?.message ||
-            data?.message ||
-            data?.body
-        )?.toLowerCase()?.trim();
-
+        const mensagem = (data?.text?.message || data?.message || data?.body)?.toLowerCase()?.trim();
         const numero = data?.phone || data?.from;
 
         if (!mensagem || !numero) return res.sendStatus(200);
 
-        // 👋 INICIO
-        if (mensagem === "oi") {
-            await enviarMensagem(numero, "🍦 Bem-vindo!\nDigite *pedir* para iniciar seu pedido.");
+        if (mensagem === "oi" || mensagem === "olá") {
+            await enviarMensagem(numero, "🍦 Bem-vindo à nossa loja!\nDigite *pedir* para comprar o seu dindin.");
         }
 
-        // 🧾 PEDIDO
         if (mensagem === "pedir") {
-            await enviarMensagem(numero, "💰 Gerando pagamento PIX...");
+            await enviarMensagem(numero, "⏳ A gerar o seu pagamento PIX... Por favor, aguarde.");
 
             try {
-                const pedido = {
-                    id: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                    cliente: "Cliente Dindin",
+                const clienteId = await obterOuCriarCliente("Cliente WhatsApp", numero);
+                const pagamento = await gerarPix(10.00, clienteId);
+
+                const novoPedido = {
+                    id: `${Date.now()}`,
                     telefone: numero,
-                    valor: 10,
-                    status: "aguardando_pagamento",
-                    paymentId: null,
+                    valor: 10.00,
+                    status: "pendente",
+                    paymentId: pagamento.id,
                     createdAt: new Date()
                 };
 
-                pedidos.push(pedido);
-                await salvarPedidos(); // Adicionado await
-
-                // Integração
-                const clienteId = await obterOuCriarCliente("Cliente Dindin", numero);
-                const pagamento = await gerarPix(10, clienteId);
-
-                // Validação do novo retorno
-                if (!pagamento?.payload) {
-                    throw new Error("Payload do PIX não gerado pelo Asaas.");
-                }
-
-                pedido.paymentId = pagamento.id;
+                pedidos.push(novoPedido);
                 await salvarPedidos();
 
                 await enviarMensagem(
                     numero,
-                    `💳 *PIX Copia e Cola:*\n\n${pagamento.payload}\n\nApós pagar, aguarde a confirmação automática do nosso sistema 🍦`
+                    `💳 *Pagamento PIX*\n\nUtilize o código Copia e Cola abaixo:\n\n${pagamento.payload}\n\n✅ O seu pedido será confirmado automaticamente após o pagamento!`
                 );
 
-            } catch (erro) {
-                console.error("ERRO Geração PIX:", erro.response?.data || erro.message);
-                await enviarMensagem(numero, "❌ Erro ao gerar pagamento. Tente novamente em alguns minutos.");
+            } catch (err) {
+                console.error("Erro ao processar pedido:", err.message);
+                await enviarMensagem(numero, "❌ Desculpe, ocorreu um erro ao gerar o seu pagamento. Tente novamente mais tarde.");
             }
         }
 
         res.sendStatus(200);
-
     } catch (error) {
-        console.error("Erro webhook Z-API:", error);
         res.sendStatus(200);
     }
 });
 
-// 💰 WEBHOOK ASAAS
+// 💰 WEBHOOK ASAAS (Confirmação de Pagamento Segura)
 app.post('/asaas', async (req, res) => {
     try {
-        const data = req.body;
-        console.log("Evento ASAAS Recebido:", data.event);
+        // 🛡️ VALIDAÇÃO DE SEGURANÇA
+        const tokenRecebido = req.headers['asaas-access-token'];
+        if (tokenRecebido !== ASAAS_WEBHOOK_TOKEN) {
+            console.error("🚨 Alerta: Tentativa de acesso não autorizado ao Webhook do Asaas!");
+            return res.status(403).send("Não autorizado");
+        }
 
-        // Opcional: Adicionar validação do Header asaas-access-token aqui no futuro
+        const data = req.body;
+        console.log(`Evento recebido do Asaas: ${data.event}`);
 
         if (data.event === "PAYMENT_RECEIVED") {
             const paymentId = data.payment.id;
@@ -194,40 +163,22 @@ app.post('/asaas', async (req, res) => {
 
                 await enviarMensagem(
                     pedido.telefone,
-                    "✅ Pagamento confirmado! Seu pedido foi aceito e já estamos separando seu dindin 🍦"
+                    "✅ *Pagamento Confirmado!*\n\nO seu dindin já está a ser preparado e sairá em breve para entrega. Obrigado! 🍦"
                 );
             }
         }
 
         res.sendStatus(200);
     } catch (error) {
-        console.error("Erro webhook ASAAS:", error);
+        console.error("Erro no processamento do Webhook Asaas:", error.message);
         res.sendStatus(500);
     }
 });
 
-// 📦 API PEDIDOS
-app.get('/pedidos', (req, res) => {
-    res.json(pedidos);
-});
+// 📊 ROTAS AUXILIARES
+app.get('/pedidos', (req, res) => res.json(pedidos));
 
-app.patch('/pedidos/:id', async (req, res) => {
-    const pedido = pedidos.find(p => p.id === req.params.id);
-
-    if (!pedido) {
-        return res.status(404).json({ error: "Pedido não encontrado" });
-    }
-
-    Object.assign(pedido, req.body);
-    await salvarPedidos();
-
-    res.json(pedido);
-});
-
-// 🌐 TESTE
-app.get('/', (req, res) => {
-    res.send("Servidor rodando 🚀");
-});
+app.get('/', (req, res) => res.send("Servidor do Bot de Vendas Ativo! 🚀"));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`Servidor a correr na porta ${PORT}`));
