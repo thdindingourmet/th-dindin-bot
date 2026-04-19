@@ -44,7 +44,8 @@ async function enviarMensagem(numero, mensagem) {
             { phone: numero, message: mensagem }
         );
     } catch (error) {
-        console.error("Erro ao enviar mensagem WhatsApp:", error.message);
+        // 👇 MUDAMOS AQUI PARA MOSTRAR O MOTIVO EXATO DO ERRO
+        console.error("Erro ao enviar WhatsApp:", error.response?.data || error.message);
     }
 }
 
