@@ -67,7 +67,7 @@ async function obterOuCriarCliente(nome, telefone) {
             { 
                 name: nome, 
                 phone: telefone,
-                cpfCnpj: "45564811029" // 👈 INJETAMOS UM CPF FALSO (porém válido matematicamente) SÓ PARA O TESTE PASSAR
+                cpfCnpj: "11749767481" // 👈 INJETAMOS UM CPF FALSO (porém válido matematicamente) SÓ PARA O TESTE PASSAR
             },
             { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
         );
