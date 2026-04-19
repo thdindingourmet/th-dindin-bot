@@ -53,7 +53,7 @@ async function obterOuCriarCliente(nome, telefone) {
     if (clientes[telefone]) return clientes[telefone];
 
     const response = await axios.post(
-        "https://api.asaas.com/v3/customers",
+        "https://sandbox.asaas.com/v3/customers",
         { name: nome, phone: telefone },
         { headers: { access_token: ASAAS_API_KEY, "Content-Type": "application/json" } }
     );
@@ -67,7 +67,7 @@ async function obterOuCriarCliente(nome, telefone) {
 async function gerarPix(valor, clienteId) {
     // 1. Criar a cobrança
     const cobranca = await axios.post(
-        "https://api.asaas.com/v3/payments",
+        "https://sandbox.asaas.com/v3/payments",
         {
             customer: clienteId,
             billingType: "PIX",
@@ -79,7 +79,7 @@ async function gerarPix(valor, clienteId) {
 
     // 2. Obter o código PIX Copia e Cola
     const qrCode = await axios.get(
-        `https://api.asaas.com/v3/payments/${cobranca.data.id}/pixQrCode`,
+        `https://sandbox.asaas.com/v3/payments/${cobranca.data.id}/pixQrCode`,
         { headers: { access_token: ASAAS_API_KEY } }
     );
 
