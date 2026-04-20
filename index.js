@@ -242,3 +242,9 @@ app.get('/', (req, res) => res.send("API TH DinDin Ativa! 🚀"));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor na porta ${PORT}`));
+} catch (err) {
+                // 👇 ADICIONE ESTA LINHA AQUI PARA O BOT NOS "CUSPIR" O ERRO REAL
+                console.error("🚨 ERRO DETALHADO DO ASAAS:", err.response?.data || err.message); 
+                
+                await enviarMensagem(numero, "❌ Ocorreu um erro ao gerar o pagamento com este CPF. Tente novamente mais tarde.");
+            }
