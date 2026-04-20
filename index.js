@@ -151,7 +151,7 @@ app.post('/webhook', async (req, res) => {
             const novoPedido = {
                 id: `${Date.now()}`,
                 telefone: numero,
-                valor: 0.01, // 👈 Teste de 1 centavo ativo
+                valor: 5,00, // 👈 Teste de 1 centavo ativo
                 status: "aguardando_cpf", 
                 createdAt: new Date()
             };
