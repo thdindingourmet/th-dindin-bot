@@ -161,11 +161,10 @@ app.post('/webhook', async (req, res) => {
 
         // 🧾 PASSO 1: CLIENTE PEDE
         if (mensagem === "pedir") {
-            // Criamos um pedido com status de "espera"
             const novoPedido = {
                 id: `${Date.now()}`,
                 telefone: numero,
-                valor: 0.01, // 👈 JÁ ALTERADO PARA 1 CENTAVO PARA O TESTE DA PRODUÇÃO
+                valor: 0.01,
                 status: "aguardando_cpf", 
                 createdAt: new Date()
             };
@@ -202,6 +201,8 @@ app.post('/webhook', async (req, res) => {
                     `💳 *PIX Copia e Cola:*\n\n${pagamento.payload}\n\n✅ O seu pedido será confirmado automaticamente assim que o pagamento cair na conta!`
                 );
             } catch (err) {
+                // 👇 A NOSSA ARMADILHA COLOCADA NO SÍTIO CERTO E SEM QUEBRAR O CÓDIGO
+                console.error("🚨 ERRO DETALHADO DO ASAAS:", err.response?.data || err.message);
                 await enviarMensagem(numero, "❌ Ocorreu um erro ao gerar o pagamento com este CPF. Tente novamente mais tarde.");
             }
             return res.sendStatus(200);
