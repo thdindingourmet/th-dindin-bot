@@ -132,6 +132,17 @@ app.post('/api/checkout-site', async (req, res) => {
 });
 
 // 🚀 WEBHOOK WHATSAPP (O Cérebro da Conversa)
+// 🔍 ROTA: SITE CONSULTA O STATUS DO PEDIDO
+app.get('/api/status-pedido/:pedidoId', (req, res) => {
+    const pedidoId = req.params.pedidoId;
+    const pedido = pedidos.find(p => p.id === pedidoId);
+
+    if (pedido) {
+        res.json({ sucesso: true, status: pedido.status });
+    } else {
+        res.status(404).json({ sucesso: false, erro: "Pedido não encontrado" });
+    }
+});
 app.post('/webhook', async (req, res) => {
     try {
         const data = req.body;
