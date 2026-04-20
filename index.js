@@ -209,6 +209,36 @@ app.post('/webhook', async (req, res) => {
         res.sendStatus(200);
     }
 });
+// 🚚 ROTA: ATUALIZAR STATUS E AVISAR CLIENTE (COM TRAVA DE DUPLICIDADE)
+app.post('/api/atualizar-status', async (req, res) => {
+    try {
+        const { pedidoId, novoStatus, linkRastreio } = req.body;
+        const pedido = pedidos.find(p => p.id === pedidoId);
+
+        if (!pedido) return res.status(404).json({ sucesso: false, erro: "Pedido não encontrado" });
+
+        // 🛡️ TRAVA: Se o status já for o mesmo, não faz nada (evita duplicidade)
+        if (pedido.status === novoStatus) {
+            return res.json({ sucesso: true, mensagem: "Status já atualizado anteriormente." });
+        }
+
+        pedido.status = novoStatus;
+        await salvarPedidos();
+
+        if (novoStatus === "saiu_entrega") {
+            // Garante que o link comece com https://
+            const linkValido = linkRastreio.startsWith('http') ? linkRastreio : `https://${linkRastreio}`;
+            
+            const msg = `🛵 *Boa notícia!* O seu dindin saiu para entrega.\n\n📍 Acompanhe em tempo real:\n${linkValido}`;
+            await enviarMensagem(pedido.telefone, msg);
+        }
+
+        res.json({ sucesso: true });
+    } catch (error) {
+        console.error("Erro ao atualizar status:", error);
+        res.status(500).json({ sucesso: false });
+    }
+});
 
 // 💰 WEBHOOK ASAAS (Confirmação de Pagamento)
 app.post('/asaas', async (req, res) => {
