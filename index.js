@@ -56,7 +56,7 @@ async function enviarMensagem(numero, mensagem) {
 async function obterOuCriarCliente(nome, telefone, cpfUsuario) {
     try {
         const response = await axios.post(
-            "https://api.asaas.com/api/v3/customers",
+            "https://api.asaas.com/v3/customers",
             { 
                 name: nome, 
                 phone: telefone,
@@ -77,7 +77,7 @@ async function obterOuCriarCliente(nome, telefone, cpfUsuario) {
 // 💳 GERAÇÃO DE PIX
 async function gerarPix(valor, clienteId) {
     const cobranca = await axios.post(
-        "https://api.asaas.com/api/v3/payments",
+        "https://api.asaas.com/v3/payments",
         {
             customer: clienteId,
             billingType: "PIX",
@@ -88,7 +88,7 @@ async function gerarPix(valor, clienteId) {
     );
 
     const qrCode = await axios.get(
-        `https://api.asaas.com/api/v3/payments/${cobranca.data.id}/pixQrCode`,
+        `https://api.asaas.com/v3/payments/${cobranca.data.id}/pixQrCode`,
         { headers: { access_token: ASAAS_API_KEY } }
     );
 
