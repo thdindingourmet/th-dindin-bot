@@ -142,9 +142,75 @@ app.post('/api/checkout-site', async (req, res) => {
     }
 });
 
-// 🚀 WEBHOOK WHATSAPP (MANTIDO)
+// 🚀 WEBHOOK WHATSAPP (O Cérebro da Conversa)
 app.post('/webhook', async (req, res) => {
-    // ... (Mantenha o código do seu webhook de whatsapp aqui igual ao anterior)
+    try {
+        const data = req.body;
+        if (data?.fromMe) return res.sendStatus(200);
+
+        const mensagem = (data?.text?.message || data?.message || data?.body)?.toLowerCase()?.trim();
+        const numero = data?.phone || data?.from;
+
+        if (!mensagem || !numero) return res.sendStatus(200);
+
+        // 👋 INÍCIO
+        if (mensagem === "oi" || mensagem === "olá") {
+            await enviarMensagem(numero, "🍦 Bem-vindo à TH DinDin Gourmet!\n\nDigite *pedir* para fazer a sua encomenda.");
+            return res.sendStatus(200);
+        }
+
+        // 🧾 PASSO 1: CLIENTE PEDE
+        if (mensagem === "pedir") {
+            // Criamos um pedido com status de "espera"
+            const novoPedido = {
+                id: `${Date.now()}`,
+                telefone: numero,
+                valor: 0.01, // 👈 JÁ ALTERADO PARA 1 CENTAVO PARA O TESTE DA PRODUÇÃO
+                status: "aguardando_cpf", 
+                createdAt: new Date()
+            };
+            pedidos.push(novoPedido);
+            await salvarPedidos();
+
+            await enviarMensagem(numero, "📝 Para gerar o seu pagamento PIX, por favor, *digite o seu CPF* (apenas números):");
+            return res.sendStatus(200);
+        }
+
+        // 🧾 PASSO 2: BOT RECEBE O CPF
+        const pedidoPendente = pedidos.find(p => p.telefone === numero && p.status === "aguardando_cpf");
+
+        if (pedidoPendente) {
+            const cpfLimpo = mensagem.replace(/\D/g, '');
+
+            if (cpfLimpo.length !== 11) {
+                await enviarMensagem(numero, "❌ CPF inválido. Por favor, digite os 11 números do seu CPF, sem pontos ou traços:");
+                return res.sendStatus(200);
+            }
+
+            await enviarMensagem(numero, "⏳ Validando os dados e a gerar o seu PIX...");
+
+            try {
+                const clienteId = await obterOuCriarCliente("Cliente WhatsApp", numero, cpfLimpo);
+                const pagamento = await gerarPix(pedidoPendente.valor, clienteId);
+
+                pedidoPendente.status = "aguardando_pagamento";
+                pedidoPendente.paymentId = pagamento.id;
+                await salvarPedidos();
+
+                await enviarMensagem(
+                    numero,
+                    `💳 *PIX Copia e Cola:*\n\n${pagamento.payload}\n\n✅ O seu pedido será confirmado automaticamente assim que o pagamento cair na conta!`
+                );
+            } catch (err) {
+                await enviarMensagem(numero, "❌ Ocorreu um erro ao gerar o pagamento com este CPF. Tente novamente mais tarde.");
+            }
+            return res.sendStatus(200);
+        }
+
+        res.sendStatus(200);
+    } catch (error) {
+        res.sendStatus(200);
+    }
 });
 
 // 💰 WEBHOOK ASAAS (Confirmação de Pagamento)
