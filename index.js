@@ -32,7 +32,7 @@ if (fs.existsSync(CLIENTES_FILE)) { clientes = JSON.parse(fs.readFileSync(CLIENT
 async function salvarPedidos() { await fsPromises.writeFile(PEDIDOS_FILE, JSON.stringify(pedidos, null, 2)); }
 async function salvarClientes() { await fsPromises.writeFile(CLIENTES_FILE, JSON.stringify(clientes, null, 2)); }
 
-// 🔍 SINCRONIZAÇÃO COM A LOJA (BASE44)
+// 🔍 SINCRONIZAÇÃO COM A LOJA REAL (BASE44)
 async function sincronizarEstoque() {
     const agora = Date.now();
     if (estoqueCache.texto !== "Carregando sabores..." && (agora - estoqueCache.lastUpdate < 300000)) {
@@ -41,6 +41,7 @@ async function sincronizarEstoque() {
     try {
         const response = await axios.get(CATALOGO_URL);
         const html = response.data.toLowerCase();
+        // Lista oficial de sabores que monitoramos no seu site
         const listaSabores = ["nutella", "ovomaltine", "limão", "paçoca", "oreo", "ninho", "ameixa"];
         let disponiveis = [];
         listaSabores.forEach(sabor => {
@@ -51,7 +52,7 @@ async function sincronizarEstoque() {
     } catch (error) { return "Nutella, Oreo, Paçoca, Mousse de Limão, Ovomaltine"; }
 }
 
-// 📩 FUNÇÕES DE APOIO
+// 📩 FUNÇÕES DE COMUNICAÇÃO
 async function enviarMensagem(numero, mensagem) {
     try {
         await axios.post(`https://api.z-api.io/instances/${INSTANCE}/token/${ZAPI_TOKEN}/send-text`, 
@@ -67,15 +68,14 @@ async function obterOuCriarCliente(nome, telefone, cpfUsuario) {
     return response.data.id;
 }
 
-// 🚀 WEBHOOK COM FILTRO DE GRUPO E IA
+// 🚀 WEBHOOK PRINCIPAL (FILTRO DE GRUPO + IA DE VENDAS)
 app.post('/webhook', async (req, res) => {
     try {
         const data = req.body;
         
-        // 🛑 FILTRO: Não responde se for mensagem de grupo (@g.us) ou enviada por mim
-        if (data?.fromMe || (data?.phone && data.phone.includes('@g.us')) || (data?.from && data.from.includes('@g.us'))) {
-            return res.sendStatus(200);
-        }
+        // 🛑 BLOQUEIO DE GRUPOS: Evita que a IA responda em grupos públicos
+        const isGroup = (data?.phone && data.phone.includes('@g.us')) || (data?.from && data.from.includes('@g.us'));
+        if (data?.fromMe || isGroup) return res.sendStatus(200);
 
         const mensagem = data?.text?.message || data?.message || data?.body;
         const numero = data?.phone || data?.from;
@@ -84,21 +84,26 @@ app.post('/webhook', async (req, res) => {
         const cardapioReal = await sincronizarEstoque();
 
         if (!conversoesAtivas[numero]) {
-            conversoesAtivas[numero] = [{ role: "system", content: `Você é a Consultora Especialista da TH DinDin Gourmet. 
-Seu atendimento é leve, moderno e usa persuasão sutil.
+            conversoesAtivas[numero] = [{ role: "system", content: `Você é a Consultora de Vendas da TH DinDin Gourmet. 
+Seu tom é leve, moderno e sutil. Você foca em Recife e Paulista.
 
-### 🧊 ESTOQUE REAL (Sincronizado):
-Sabores disponíveis: ${cardapioReal}. 
-NUNCA invente sabores. Se não estiver na lista, diga que esgotou.
+### 🧊 ESTOQUE REAL AGORA:
+Estes são os únicos sabores disponíveis: ${cardapioReal}. 
+NUNCA mencione Manga, Mamão ou sabores fora desta lista.
 
-### 🌟 REGRAS DE NEGÓCIO
-- Vendedores: TH (Boa Vista), Sergio (Derby), Tony (Ilha do Leite), Natanael (Portugues).
-- Sutileza: Só mencione a entrega grátis (5+ unid) se o cliente perguntar de frete ou quantidade.
-- Revenda: Lucro alto! 70+ unid sai a R$ 3,90/cada.
-- Pagamento: Apenas PIX ou Cartão Online.
+### 🚲 VENDEDORES E REGIÕES (Seg-Sex, 11:30 às 16:00):
+- TH (Thiago): Boa Vista, Santo Amaro, Unicap, Unibra, Oswaldo Cruz.
+- Sergio Ricardo: Derby, Jaqueira, Parnamirim, Caxangá.
+- Tony: Ilha do Leite, Agamenon, Graças, Senac.
+- Natanael: Hosp. Português (até 14:20), HR, Casa Amarela (14:45).
 
-### 🤖 FECHAMENTO
-Gere JSON apenas com dados completos:
+### 💰 REGRAS SUTIS:
+- Unidade: R$ 7,99.
+- Promoção: "Muitos clientes levam 5 unidades para garantir a entrega grátis".
+- Pagamento: Apenas PIX ou Cartão Online (por segurança dos motoboys).
+
+### 🤖 FECHAMENTO DE PEDIDO:
+Gere JSON somente com Nome, CPF, Endereço e Sabores:
 {"nome": "[Nome]", "cpf": "[CPF]", "endereco": "[Endereço]", "itens": [{"nome": "Sabor", "preco": 7.99, "quantidade": 5}]}` }];
         }
 
@@ -117,12 +122,12 @@ Gere JSON apenas com dados completos:
             const qr = await axios.get(`https://api.asaas.com/v3/payments/${cobranca.data.id}/pixQrCode`, { headers: { access_token: ASAAS_API_KEY } });
             pedidos.push({ id: `WA-${Date.now()}`, telefone: numero, valor: valorTotal, status: "aguardando_pagamento", paymentId: cobranca.data.id });
             await salvarPedidos();
-            await enviarMensagem(numero, `🚀 Tudo pronto! Aqui está seu PIX:\n\n${qr.data.payload}\n\n✅ Total: R$ ${valorTotal.toFixed(2).replace('.',',')}`);
+            await enviarMensagem(numero, `🚀 Pedido fechado com sucesso! Aqui está o seu PIX:\n\n${qr.data.payload}\n\n✅ Total: R$ ${valorTotal.toFixed(2).replace('.',',')}`);
             delete conversoesAtivas[numero];
         } else { await enviarMensagem(numero, textoIA); }
         res.sendStatus(200);
     } catch (e) { res.sendStatus(200); }
 });
 
-app.get('/', (req, res) => res.send("API TH DinDin V4.2 - Silenciosa em Grupos e Ativa em Vendas! 🍦🚀"));
+app.get('/', (req, res) => res.send("API TH DinDin V4.5 - Inteligência de Vendas Privada! 🍦🚀"));
 app.listen(process.env.PORT || 3000);
