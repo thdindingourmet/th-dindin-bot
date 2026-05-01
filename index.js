@@ -127,3 +127,25 @@ Apenas quando o cliente fornecer Nome, CPF, Endereço e confirmar os itens finai
 {"nome": "[Nome]", "cpf": "[CPF]", "endereco": "[Endereço]", "itens": [{"nome": "Sabor", "preco": 7.99, "quantidade": 5}]}` }
             ];
         }
+conversoesAtivas[numero].push({ role: "user", content: mensagem });
+        const respostaIA = await openai.chat.completions.create({ model: "gpt-3.5-turbo", messages: conversoesAtivas[numero] });
+        const textoIA = respostaIA.choices[0].message.content;
+        conversoesAtivas[numero].push({ role: "assistant", content: textoIA });
+
+        if (textoIA.includes('"cpf"') && textoIA.includes('"itens"')) {
+            const inicioJson = textoIA.indexOf('{');
+            const fimJson = textoIA.lastIndexOf('}') + 1;
+            const jsonPedido = JSON.parse(textoIA.substring(inicioJson, fimJson));
+            const valorTotal = jsonPedido.itens.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
+            const clienteId = await obterOuCriarCliente(jsonPedido.nome, numero, jsonPedido.cpf.replace(/\D/g, ''));
+            const cobranca = await axios.post("https://api.asaas.com/v3/payments", { customer: clienteId, billingType: "PIX", value: valorTotal, dueDate: new Date().toISOString().split("T")[0] }, { headers: { access_token: ASAAS_API_KEY } });
+            const qr = await axios.get(`https://api.asaas.com/v3/payments/${cobranca.data.id}/pixQrCode`, { headers: { access_token: ASAAS_API_KEY } });
+            pedidos.push({ id: `WA-${Date.now()}`, telefone: numero, valor: valorTotal, status: "aguardando_pagamento", paymentId: cobranca.data.id });
+            await salvarPedidos();
+            await enviarMensagem(numero, `🚀 Pedido fechado com sucesso! Aqui está o seu PIX:\n\n${qr.data.payload}\n\n✅ Total: R$ ${valorTotal.toFixed(2).replace('.',',')}`);
+            delete conversoesAtivas[numero];
+        } else { await enviarMensagem(numero, textoIA); }
+        res.sendStatus(200);
+    } catch (e) { res.sendStatus(200); }
+});
+    
