@@ -14,7 +14,7 @@ const ZAPI_TOKEN = process.env.ZAPI_TOKEN;
 const INSTANCE = process.env.INSTANCE;
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN;
-const BASE44_MENU_URL = "https://thdindingourmet.base44.app/loja"; // 👈 Ajuste para o endpoint real da Base44
+const BASE44_MENU_URL = "https://thdindingourmet.com/loja"; // 👈 Ajuste para o endpoint real da Base44
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // 📂 FICHEIROS E CACHE
