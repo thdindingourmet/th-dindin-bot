@@ -123,4 +123,8 @@ Ao fechar, gere APENAS o JSON:
 });
 
 app.get('/', (req, res) => res.send("🚀 TH DinDin V4.5 - Online!"));
-app.listen(process.env.PORT || 3000);
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor rodando perfeitamente na porta ${PORT}`);
+});
