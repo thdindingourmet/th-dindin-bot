@@ -30,21 +30,39 @@ if (fs.existsSync(CLIENTES_FILE)) { clientes = JSON.parse(fs.readFileSync(CLIENT
 async function salvarPedidos() { await fsPromises.writeFile(PEDIDOS_FILE, JSON.stringify(pedidos, null, 2)); }
 async function salvarClientes() { await fsPromises.writeFile(CLIENTES_FILE, JSON.stringify(clientes, null, 2)); }
 
-// 🔍 SINCRONIZAÇÃO COM A LOJA (BASE44)
+// 🔍 SINCRONIZAÇÃO ABSOLUTA (Garantia de Leitura do Cardápio)
 async function sincronizarEstoque() {
     const agora = Date.now();
-    if (estoqueCache.texto !== "Carregando sabores..." && (agora - estoqueCache.lastUpdate < 300000)) return estoqueCache.texto;
-    try {
-        const response = await axios.get(CATALOGO_URL);
-        const html = response.data.toLowerCase();
-        const listaSabores = ["nutella", "ovomaltine", "limão", "paçoca", "oreo", "ninho", "ameixa"];
-        let disponiveis = [];
-        listaSabores.forEach(sabor => { if (html.includes(sabor)) disponiveis.push(sabor.charAt(0).toUpperCase() + sabor.slice(1)); });
-        estoqueCache = { texto: disponiveis.length > 0 ? disponiveis.join(", ") : "Sabores variados", lastUpdate: agora };
-        return estoqueCache.texto;
-    } catch (error) { return "Nutella, Oreo, Paçoca, Mousse de Limão, Ovomaltine"; }
-}
+    if (estoqueCache.texto && (agora - estoqueCache.lastUpdate < 300000)) return estoqueCache.texto;
 
+    try {
+        const response = await axios.get(CATALOGO_URL, {
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' 
+            },
+            timeout: 10000
+        });
+
+        const htmlLimpo = response.data.toLowerCase().replace(/<[^>]*>?/gm, ' ');
+        const listaMestre = ["nutella", "ovomaltine", "limão", "paçoca", "oreo", "pavê", "morango com leite condensado", "chocolate premium", "Mousse de maracujá", "delícia de abacaxi"];
+        
+        let disponiveis = [];
+        listaMestre.forEach(sabor => {
+            if (htmlLimpo.includes(sabor)) {
+                disponiveis.push(sabor.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
+            }
+        });
+        
+        const resultadoFinal = disponiveis.length > 0 ? disponiveis.join(", ") : "Nutella, Oreo, Paçoca, Mousse de Limão e Ovomaltine";
+        estoqueCache = { texto: resultadoFinal, lastUpdate: agora };
+        console.log("✅ Estoque atualizado com sucesso:", resultadoFinal);
+        return resultadoFinal;
+
+    } catch (error) {
+        console.error("❌ Erro crítico ao ler cardápio:", error.message);
+        return "Nutella, Oreo, Paçoca, Mousse de Limão e Ovomaltine";
+    }
+}
 // 📩 FUNÇÕES DE COMUNICAÇÃO
 async function enviarMensagem(numero, mensagem) {
     try {
@@ -78,8 +96,9 @@ app.post('/webhook', async (req, res) => {
             conversoesAtivas[numero] = [{ role: "system", content: `Você é a Consultora Premium da TH DinDin Gourmet. Foco: fechar vendas rápido com público jovem e influenciador de Recife/Paulista.
 
 ### 💎 PERSONALIDADE
-- Use tom moderno, descolado e com energia (vibe trend/aesthetic). Use emojis (🔥, 🍦, ✨, 🚀).
+- Use tom moderno, mais coloquial, descolado e com energia, carismático, atencioso (vibe trend/aesthetic). Use emojis moderadamente (🔥, 🍦, ✨, 🚀).
 - NUNCA seja formal ou burocrática no início.
+- EVITAR textos longos.
 
 ### 🚲 VENDEDORES E REGIÕES (Seg-Sex, 11:30 às 16:00):
 Use estas informações APENAS se o cliente perguntar sobre entregas, locais ou se tem alguém perto dele:
@@ -89,9 +108,9 @@ Use estas informações APENAS se o cliente perguntar sobre entregas, locais ou 
 - Natanael (81 98514-1452): Ilha do Leite / EREM Alvaro Lins (10:00 e 15:20) / Casa Amarela (14:45) / Nova Descoberta (15:30) / Paissandu / Ilha do Retiro / Av. Agamenon / Graças / Derby / Hosp Português (fica até 14:20) / HR Restauração / Bloco B UNINASSAU.
 
 ### 🔄 FUNIL MATADOR:
-1. CONEXÃO: Entenda a vibe (doce ou frutado?).
+1. CONEXÃO: Entenda a vibe (MAIS DE FRUTAS, CHOCOLATE, OU AMENDOIM?).
 2. VITRINE: Mostre os sabores reais (${cardapioReal}).
-3. AÇÃO: "Manda os sabores que já separo voando!".
+3. AÇÃO: "Manda os sabores que já peço pra separar Rapidinho!".
 4. UPSELL: Se pedir menos de 5, sugira fechar o combo pra ganhar frete grátis.
 5. FECHAMENTO: Só peça Nome, CPF e Endereço APÓS confirmar os itens.
 
